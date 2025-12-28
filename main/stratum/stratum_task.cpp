@@ -1,5 +1,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <netdb.h>
 #include <time.h>
 
 #include "esp_log.h"

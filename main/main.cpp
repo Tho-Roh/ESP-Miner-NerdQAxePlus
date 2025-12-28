@@ -20,9 +20,11 @@
 #include "boards/nerdqaxeplus.h"
 #include "boards/nerdqaxeplus2.h"
 #include "boards/nerdqx.h"
+#include "connect.h"
 #include "create_jobs_task.h"
 #include "discord.h"
 #include "global_state.h"
+#include "guards.h"
 #include "hashrate_monitor_task.h"
 #include "history.h"
 #include "http_server.h"
@@ -33,12 +35,11 @@
 #include "otp/otp.h"
 #include "ping_task.h"
 #include "serial.h"
-#include "stratum/stratum_manager_fallback.h"
 #include "stratum/stratum_manager_dual_pool.h"
+#include "stratum/stratum_manager_fallback.h"
 #include "system.h"
-#include "wifi_health.h"
-#include "guards.h"
 #include "utils.h"
+#include "wifi_health.h"
 
 #define STRATUM_WATCHDOG_TIMEOUT_SECONDS 3600
 
@@ -82,12 +83,40 @@ bool is_time_synced(void)
     return (sntp.isTimeSynced() && now() >= 1609459200);
 }
 
+static void on_wifi_status(apsta_wifi_status_t st, uint16_t retry, void *ctx)
+{
+    switch (st) {
+    case APSTA_WIFI_CONNECTED:
+        SYSTEM_MODULE.setWifiStatus("Connected!");
+        break;
+    case APSTA_WIFI_RETRYING: {
+        char buf[20];
+        snprintf(buf, sizeof(buf), "Retrying: %u", retry);
+        SYSTEM_MODULE.setWifiStatus(buf);
+        break;
+    }
+    case APSTA_WIFI_CONNECT_FAILED:
+        SYSTEM_MODULE.setWifiStatus("Connect Failed!");
+        break;
+    case APSTA_WIFI_CONNECTING:
+    case APSTA_WIFI_DISCONNECTED:
+    default:
+        // NOP
+        break;
+    }
+}
+
+static void on_ap_state(bool ap_on, void *ctx)
+{
+    SYSTEM_MODULE.setAPState(ap_on);
+}
+
 static void setup_wifi()
 {
     // pull the wifi credentials and hostname out of NVS
     char *wifi_ssid = Config::getWifiSSID();
     char *wifi_pass = Config::getWifiPass();
-    char *hostname  = Config::getHostname();
+    char *hostname = Config::getHostname();
 
     // release on exit of scope (RAII)
     MemoryGuard gSsid(wifi_ssid);
@@ -97,37 +126,28 @@ static void setup_wifi()
     // copy the wifi ssid to the global state
     SYSTEM_MODULE.setSsid(wifi_ssid);
 
-    // init and connect to wifi (asynchronous setup)
-    wifi_init(wifi_ssid, wifi_pass, hostname);
+    apsta_set_hostname(hostname);
 
-    // start rest server (needed in AP fallback for config)
-    start_rest_server(NULL);
+    // Register callbacks
+    apsta_register_status_callback(on_wifi_status, NULL);
+    apsta_register_ap_state_callback(on_ap_state, NULL);
 
-    // initial blocking wait: CONNECTED or FAIL
-    EventBits_t bits = wifi_connect();
+    apsta_config_t cfg{};
 
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "Connected to SSID: %s", wifi_ssid);
-        SYSTEM_MODULE.setWifiStatus("Connected!");
-        return;
-    }
+    cfg.sta_ssid = wifi_ssid;
+    cfg.sta_pass = wifi_pass;
+    cfg.ap_ssid = NULL; // auto "nerdaxe-xxxx"
+    cfg.ap_channel = 1;
+    cfg.ap_max_conn = 4;
+    cfg.ps_disable = true;
+    cfg.country.cc[0] = 'D';
+    cfg.country.cc[1] = 'E';
+    cfg.country.schan = 1;
+    cfg.country.nchan = 13;
+    cfg.country.policy = WIFI_COUNTRY_POLICY_AUTO;
+    cfg.notify_fail_after_retries = 10;
 
-    // Initial connect failed: stay in AP fallback, keep waiting for STA recovery
-    ESP_LOGW(TAG, "Initial WiFi connect failed. Staying in AP fallback and waiting for STA recovery...");
-
-    for (;;) {
-        // Wait up to 30s for STA to come up (retries run in background)
-        EventBits_t w = wifi_wait_connected_ms(pdMS_TO_TICKS(30000));
-
-        if (w & WIFI_CONNECTED_BIT) {
-            ESP_LOGI(TAG, "STA recovered and connected to SSID: %s", wifi_ssid);
-            SYSTEM_MODULE.setWifiStatus("Connected!");
-            return; // continue normal init after this
-        }
-
-        // Heartbeat while waiting in AP mode
-        ESP_LOGI(TAG, "Still waiting for STA to connect... (AP is available for config)");
-    }
+    ESP_ERROR_CHECK(apsta_start_block_until_sta_ip_then_drop_ap(&cfg));
 }
 
 // Function to configure the Task Watchdog Timer (TWDT)
@@ -147,7 +167,8 @@ void initWatchdog()
     }
 }
 
-StratumManager* newStratumManager() {
+StratumManager *newStratumManager()
+{
     int mode = (int) Config::getPoolMode();
     switch (mode) {
     case 0:
@@ -191,7 +212,6 @@ void monitor_all_task_watermarks() {
     }
 }
 #endif
-
 
 extern "C" void app_main(void)
 {
@@ -242,7 +262,6 @@ extern "C" void app_main(void)
     board->loadSettings();
     board->initBoard();
 
-
     SYSTEM_MODULE.setBoard(board);
 
     size_t total_psram = esp_psram_get_size();
@@ -277,9 +296,6 @@ extern "C" void app_main(void)
     // when a username is configured we will continue with startup and start mining
     const char *username = Config::nvs_config_get_string(NVS_CONFIG_STRATUM_USER, NULL); // TODO
     if (username) {
-        // wifi is connected, switch the AP off
-        wifi_softap_off();
-
         discordAlerter.init();
         discordAlerter.loadConfig();
 
@@ -321,7 +337,7 @@ extern "C" void app_main(void)
 
         if (POWER_MANAGEMENT_MODULE.isShutdown()) {
             // not needed, we deregister the WDT in the stratumtask on shutdown
-            //esp_task_wdt_deinit();
+            // esp_task_wdt_deinit();
             ESP_LOGW(TAG, "suspended");
             vTaskSuspend(NULL);
         }
@@ -333,34 +349,4 @@ extern "C" void app_main(void)
         }
         // monitor_all_task_watermarks();
     }
-}
-
-void MINER_set_wifi_status(wifi_status_t status, uint16_t retry_count)
-{
-    switch (status) {
-    case WIFI_CONNECTED: {
-        SYSTEM_MODULE.setWifiStatus("Connected!");
-        break;
-    }
-    case WIFI_RETRYING: {
-        char buf[20];
-        snprintf(buf, sizeof(buf), "Retrying: %d", retry_count);
-        SYSTEM_MODULE.setWifiStatus(buf);
-        break;
-    }
-    case WIFI_CONNECT_FAILED: {
-        SYSTEM_MODULE.setWifiStatus("Connect Failed!");
-        break;
-    }
-    case WIFI_DISCONNECTED:
-    case WIFI_CONNECTING:
-    case WIFI_DISCONNECTING: {
-        // NOP
-        break;
-    }
-    }
-}
-
-void MINER_set_ap_status(bool state) {
-    SYSTEM_MODULE.setAPState(state);
 }
