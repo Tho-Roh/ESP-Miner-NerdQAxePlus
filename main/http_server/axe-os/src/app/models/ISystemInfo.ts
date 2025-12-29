@@ -13,7 +13,10 @@ export interface ISystemInfo {
     voltage: number,
     maxVoltage: number,
     minVoltage: number,
-    current: number,
+    current: number,  // mA (raw)
+    currentA?: number;
+    minCurrentA?: number;
+    maxCurrentA?: number;
     temp: number,
     vrTemp: number,
     hashRateTimestamp: number,

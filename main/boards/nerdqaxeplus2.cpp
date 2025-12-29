@@ -30,6 +30,8 @@ NerdQaxePlus2::NerdQaxePlus2() : NerdQaxePlus() {
     m_minPin = 52.0;
     m_maxVin = 13.0;
     m_minVin = 11.0;
+    m_minCurrentA = 0.0f;
+    m_maxCurrentA = 8.0f;
 
     m_asicMaxDifficulty = 2048;
     m_asicMinDifficulty = 512;

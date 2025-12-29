@@ -58,6 +58,8 @@ NerdQX::NerdQX() : NerdQaxePlus2() {
     m_minPin = 50.0;
     m_maxVin = 12.7;
     m_minVin = 11.7;
+    m_minCurrentA = 0.0f;
+    m_maxCurrentA = 20.0f;
 
     m_asicMaxDifficulty = 4096;
     m_asicMinDifficulty = 1024;

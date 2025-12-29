@@ -86,6 +86,8 @@ public:
     float m_minPin;
     float m_maxVin;
     float m_minVin;
+    float m_minCurrentA = 0.0f;
+    float m_maxCurrentA = 8.0f; // default for small devices
 
     int m_numFans;
 
@@ -262,6 +264,18 @@ public:
     float getMaxVin()
     {
         return m_maxVin;
+    }
+
+    // Returns the minimum input current (A) for UI gauge scaling
+    float getMinCurrentA()
+        const {
+        return m_minCurrentA;
+    }
+
+    // Returns the maximum input current (A) for UI gauge scaling
+    float getMaxCurrentA()
+        const {
+        return m_maxCurrentA;
     }
 
     float getVrMaxTemp()

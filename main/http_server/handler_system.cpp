@@ -84,10 +84,12 @@ esp_err_t GET_system_info(httpd_req_t *req)
     doc["power"]              = POWER_MANAGEMENT_MODULE.getPower();
     doc["maxPower"]           = board->getMaxPin();
     doc["minPower"]           = board->getMinPin();
-    doc["voltage"]            = POWER_MANAGEMENT_MODULE.getVoltage();
     doc["maxVoltage"]         = board->getMaxVin();
     doc["minVoltage"]         = board->getMinVin();
-    doc["current"]            = POWER_MANAGEMENT_MODULE.getCurrent();
+    doc["current"]            = POWER_MANAGEMENT_MODULE.getCurrent();           // mA (raw)
+    doc["currentA"]           = POWER_MANAGEMENT_MODULE.getCurrent() / 1000.0f; // A (UI)
+    doc["minCurrentA"]        = board->getMinCurrentA(); // A
+    doc["maxCurrentA"]        = board->getMaxCurrentA(); // A
     doc["temp"]               = POWER_MANAGEMENT_MODULE.getChipTempMax();
     doc["vrTemp"]             = POWER_MANAGEMENT_MODULE.getVRTemp();
     doc["hashRateTimestamp"]  = history->getCurrentTimestamp();

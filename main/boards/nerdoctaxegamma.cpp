@@ -58,6 +58,8 @@ NerdOctaxeGamma::NerdOctaxeGamma() : NerdQaxePlus2() {
         m_ifault = 235.0;
         m_maxPin = 300.0;    // ~300W output Typically
         m_minPin = 30.0;
+        m_minCurrentA = 0.0f;
+        m_maxCurrentA = 25.0f;
         m_tps = new TPS53667();
 
         // Extended frequency range for TPS53667 (6 phases, higher power capacity)
@@ -80,6 +82,8 @@ NerdOctaxeGamma::NerdOctaxeGamma() : NerdQaxePlus2() {
         m_ifault = 140.0;
         m_maxPin = 200.0;
         m_minPin = 100.0;
+        m_minCurrentA = 0.0f;
+        m_maxCurrentA = 20.0f;
         // m_asicFrequencies and m_absMaxAsicFrequency inherited from parent (500-600 MHz, max 800)
 
         ESP_LOGI(TAG, "TPS53647 voltage regulator detected (GPIO3=LOW, 4 phases, using inherited)");

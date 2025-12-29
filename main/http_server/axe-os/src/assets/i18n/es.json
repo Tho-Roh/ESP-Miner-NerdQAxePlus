@@ -68,7 +68,9 @@
   },
   "PERFORMANCE": {
     "TITLE": "Rendimiento",
+    "TITLE_POWER_USAGE": "Consumo de energía",
     "POWER": "Potencia",
+    "INPUT_CURRENT": "Corriente de Entrada",
     "INPUT_VOLTAGE": "Voltaje de Entrada",
     "ASIC_VOLTAGE": "Voltaje ASIC",
     "ASIC_VOLTAGE_MEASURED": "Voltaje ASIC Medido",

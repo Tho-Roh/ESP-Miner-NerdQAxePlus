@@ -58,6 +58,8 @@ NerdAxe::NerdAxe() : Board() {
     m_minPin = 5.0;
     m_maxVin = 5.5;
     m_minVin = 4.5;
+    m_minCurrentA = 0.0f;
+    m_maxCurrentA = 5.0f;
 
     m_asicMaxDifficulty = 256;
     m_asicMinDifficulty = 64;

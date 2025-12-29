@@ -51,6 +51,8 @@ NerdQaxePlus::NerdQaxePlus() : Board() {
     m_minPin = 30.0;
     m_maxVin = 13.0;
     m_minVin = 11.0;
+    m_minCurrentA = 0.0f;
+    m_maxCurrentA = 6.0f;
 
     m_pidSettings.targetTemp = 55;
     m_pidSettings.p = 600; //   6.00

@@ -68,7 +68,9 @@
   },
   "PERFORMANCE": {
     "TITLE": "Performance",
+    "TITLE_POWER_USAGE": "Power Usage",
     "POWER": "Power",
+    "INPUT_CURRENT": "Input Current",
     "INPUT_VOLTAGE": "Input Voltage",
     "ASIC_VOLTAGE": "ASIC Voltage",
     "ASIC_VOLTAGE_MEASURED": "ASIC Voltage Measured",
