@@ -109,6 +109,8 @@ bool NerdQX::initBoard() {
 }
 
 void NerdQX::requestChipTemps() {
+    // in shutdown the LDOs are not powered and we can't
+    // measure the chip temps, so we reset it to 0 to prevent stale values
     if (m_shutdown) {
         for (int i = 0; i < m_asicCount; i++) {
             setChipTemp(i, 0.0f);
@@ -116,14 +118,15 @@ void NerdQX::requestChipTemps() {
         return;
     }
 
+    // don't try when we know we don't have it
     if (!m_hasTMux || !m_tempMux) {
         ESP_LOGE(TAG, "No temperature mux available");
-        // ESP_LOGI(TAG, "temperature of chip %d: %.3f", i, temp);
         return;
     }
 
     for (int i = 0; i < m_asicCount; i++) {
         float temp = m_tempMux->get_temperature(i);
+        // ESP_LOGI(TAG, "temperature of chip %d: %.3f", i, temp);
         if (!isnan(temp)) {
             setChipTemp(i, temp);
         }
