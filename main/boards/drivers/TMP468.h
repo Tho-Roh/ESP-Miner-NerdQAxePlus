@@ -48,6 +48,7 @@ public:
 
     // Rohdaten (MSB/LSB) direkt lesen
     bool readRawData(uint8_t channel, uint8_t &msb, uint8_t &lsb);
+    bool  readLocalTemp(float* out_C);     // Local temperature (°C)
 
 private:
     uint8_t m_addr;
@@ -75,4 +76,5 @@ private:
 };
 
 #endif
+
 
