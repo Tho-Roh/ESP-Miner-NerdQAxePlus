@@ -8,7 +8,7 @@
 #include "./drivers/tmp451_mux.h"
 
 class NerdQX : public NerdQaxePlus2 {
-  protected:
+protected:
     Tmp451Mux m_tmp451;
 
     // flag to remember if we found the tmux
