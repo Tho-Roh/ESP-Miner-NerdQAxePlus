@@ -97,6 +97,17 @@ float TMP468::read_local_celsius() {
     return NAN;
 }
 
+bool TMP468::readLocalTemp(float *out_C)
+{
+    if (!out_C)
+        return false;
+    float v = read_local_celsius();
+    if (isnan(v))
+        return false;
+    *out_C = v;
+    return true;
+}
+
 float TMP468::read_remote_celsius(int channel) {
     if (channel < 1 || channel > 8) return NAN;
 
@@ -122,3 +133,4 @@ float TMP468::temp_correct(int ch, float t_meas) {
     if (isnan(t_meas) || ch < 1 || ch > 8) return t_meas;
     return ((t_meas - 30.0f) * gCal.scale + 30.0f) + gCal.off[ch - 1];
 }
+
