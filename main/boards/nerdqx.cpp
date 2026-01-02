@@ -75,11 +75,27 @@ NerdQX::NerdQX() : NerdQaxePlus2() {
 bool NerdQX::initBoard() {
     bool ret = NerdQaxePlus::initBoard();
 
-    m_hasTMux = m_tmp451.init() == ESP_OK;
+    // --- 1. Versuche TMP468 ---
+    static TMP468 tmp468;
+    if (tmp468.init() == ESP_OK) {
+        ESP_LOGI(TAG, "TMP468 detected");
+        m_tempMux = &tmp468;
+        m_hasTMux = true;
+        return ret;
+    }
 
-    if (!m_hasTMux) {
-        ESP_LOGE(TAG, "TMUX probe failed. Assuming non-QX board; applying safety limits.");
-
+    // --- 2. Fallback: TMP451 + MUX ---
+    static Tmp451Mux tmp451;
+    if (tmp451.init() == ESP_OK) {
+        ESP_LOGI(TAG, "TMP451 MUX detected");
+        m_tempMux = &tmp451;
+        m_hasTMux = true;
+        return ret;
+    }
+    // --- 3. Kein Temperatursensor ---
+    ESP_LOGE(TAG, "TMUX probe failed. Assuming non-QX board; applying safety limits.");
+    m_hasTMux = false;
+    
         // set new limits
         m_absMaxAsicVoltageMillis = 1150;
         m_absMaxAsicFrequency = 495;
@@ -93,24 +109,20 @@ bool NerdQX::initBoard() {
 }
 
 void NerdQX::requestChipTemps() {
-    // in shutdown the LDOs are not powered and we can't
-    // measure the chip temps, so we reset it to 0 to prevent stale values
     if (m_shutdown) {
-        for (int i=0;i<m_asicCount;i++) {
+        for (int i = 0; i < m_asicCount; i++) {
             setChipTemp(i, 0.0f);
         }
         return;
     }
 
-    // don't try when we know we don't have it
-    if (!m_hasTMux) {
-        ESP_LOGE(TAG, "TMUX not detected.");
+    if (!m_hasTMux || !m_tempMux) {
+        ESP_LOGW(TAG, "No temperature mux available");
         return;
     }
 
-    for (int i=0;i<m_asicCount;i++) {
-        float temp = m_tmp451.get_temperature(i);
-        // ESP_LOGI(TAG, "temperature of chip %d: %.3f", i, temp);
+    for (int i = 0; i < m_asicCount; i++) {
+        float temp = m_tempMux->get_temperature(i);
         if (!isnan(temp)) {
             setChipTemp(i, temp);
         }
