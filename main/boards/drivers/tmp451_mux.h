@@ -6,8 +6,9 @@
 #include "esp_log.h"
 #include <stdint.h>
 #include <math.h>
+#include "temp_mux.h"
 
-class Tmp451Mux {
+class Tmp451Mux : public ITempMux {
 public:
     Tmp451Mux(gpio_num_t mux_a0 = GPIO_NUM_2,
               gpio_num_t mux_a1 = GPIO_NUM_3,
