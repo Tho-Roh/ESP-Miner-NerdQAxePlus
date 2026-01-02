@@ -102,9 +102,7 @@ bool NerdQX::initBoard() {
 
         // reload settings to apply new absMax values
         loadSettings();
-    }
-
-    // return result from initBoard
+        // return result from initBoard
     return ret;
 }
 
