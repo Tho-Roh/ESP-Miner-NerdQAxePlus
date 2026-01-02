@@ -11,6 +11,7 @@
 #include "esp_check.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "temp_mux.h"
 
 // Projektweiter I2C-Treiber
 #include "i2c_master.h"
@@ -34,7 +35,7 @@
 #define REG_NFACTOR_BASE         0x41
 #define REG_MAN_ID               0xFE
 
-class TMP468 {
+class TMP468 : public ITempMux {
 public:
     // Übergabe des I2C-Ports (Standard: I2C_NUM_0)
     TMP468(uint8_t addr = TMP468_ADDR, i2c_port_t port = I2C_NUM_0);
@@ -74,3 +75,4 @@ private:
 };
 
 #endif
+
