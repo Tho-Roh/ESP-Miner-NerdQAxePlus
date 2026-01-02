@@ -27,13 +27,16 @@
 #define TMP468_ADDR              0x48
 #define TMP468_MANUFACTURER_ID   0x5449
 
-// Register
+// --- Allgemeine Register ---
 #define REG_TEMP_BASE            0x00
 #define REG_STATUS               0x21  // Device Status Register (kein Temperaturregister!)
 #define REG_CONFIG               0x30
-#define REG_OFFSET_BASE          0x40
-#define REG_NFACTOR_BASE         0x41
 #define REG_MAN_ID               0xFE
+
+// --- Remote-Kanal Register (Linux-Schema) ---
+// channel = 1..8
+#define TMP468_OFFSET_REG(ch)    (0x40 + ((ch) - 1) * 8)
+#define TMP468_NFACTOR_REG(ch)   (0x41 + ((ch) - 1) * 8)
 
 class TMP468 : public ITempMux {
 public:
@@ -76,5 +79,6 @@ private:
 };
 
 #endif
+
 
 
