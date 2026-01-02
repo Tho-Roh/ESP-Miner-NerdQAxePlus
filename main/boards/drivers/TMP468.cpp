@@ -74,9 +74,15 @@ esp_err_t TMP468::init() {
     );
 
     // Offset & N-Factor zurücksetzen
-    for (int i = 0; i < 8; i++) {
-        write_reg(REG_NFACTOR_BASE + (i * 8), 0x00);
-        write_reg(REG_OFFSET_BASE  + (i * 8), 0x00);
+    /*
+     * Hardware-Offset & N-Factor zurücksetzen
+     * Linux-Treiber-Schema:
+     *   Offset  = 0x40 + (ch-1)*8
+     *   NFactor = 0x41 + (ch-1)*8
+     */
+    for (int ch = 1; ch <= 8; ch++) {
+        write_reg(TMP468_OFFSET_REG(ch),  0x00);
+        write_reg(TMP468_NFACTOR_REG(ch), 0x00);
     }
 
     ESP_LOGI(TAG, "TMP468 initialized @0x%02X on I2C port %d", m_addr, m_port);
@@ -133,4 +139,5 @@ float TMP468::temp_correct(int ch, float t_meas) {
     if (isnan(t_meas) || ch < 1 || ch > 8) return t_meas;
     return ((t_meas - 30.0f) * gCal.scale + 30.0f) + gCal.off[ch - 1];
 }
+
 
