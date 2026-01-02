@@ -117,7 +117,8 @@ void NerdQX::requestChipTemps() {
     }
 
     if (!m_hasTMux || !m_tempMux) {
-        ESP_LOGW(TAG, "No temperature mux available");
+        ESP_LOGE(TAG, "No temperature mux available");
+        // ESP_LOGI(TAG, "temperature of chip %d: %.3f", i, temp);
         return;
     }
 
