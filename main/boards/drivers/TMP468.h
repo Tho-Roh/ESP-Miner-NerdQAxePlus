@@ -44,7 +44,10 @@ public:
     esp_err_t init() override;
 
     // ASIC index → temperature
-    float get_temperature(int asic_index) override;
+// asic_index semantics (matches Tmp451Mux):
+//   -1 → local/internal temperature
+//   >=0 → ASIC index (mapped to TMP468 remote channels 1..8)
+float get_temperature(int asic_index) override;
 
     // API parity with Tmp451Mux
     bool readLocalTemp(float* out_C) override;
@@ -82,3 +85,4 @@ private:
 };
 
 #endif
+
