@@ -1,6 +1,10 @@
 #include "TMP468.h"
 #include <esp_check.h>
 
+// -----------------------------------------------------------------------------
+// Software Calibration (matches Tmp451Mux behaviour)
+// -----------------------------------------------------------------------------
+
 struct TempCal {
     float scale;
     float off[8];
@@ -12,13 +16,12 @@ static TempCal gCal = {
       -29.5f, -29.5f, -29.5f, -29.5f }
 };
 
-// FIX: Konstruktor-Signatur korrigiert
 TMP468::TMP468(uint8_t addr, i2c_port_t port, uint8_t asicCount)
     : m_addr(addr), m_port(port), m_asicCount(asicCount) {}
 
-// ---------------------------------------------------------------------------
-// I2C
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// I2C helpers
+// -----------------------------------------------------------------------------
 
 esp_err_t TMP468::read_reg(uint8_t reg, uint8_t* out) {
     return i2c_master_read_reg(m_port, m_addr, reg, out, 1);
@@ -37,16 +40,15 @@ esp_err_t TMP468::read_reg_16(uint8_t reg, uint8_t* msb, uint8_t* lsb) {
     return ESP_OK;
 }
 
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // Init
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
 esp_err_t TMP468::init() {
     uint8_t msb, lsb;
 
-    ESP_RETURN_ON_ERROR(
-        read_reg_16(REG_MAN_ID, &msb, &lsb),
-        TAG, "MAN ID read failed");
+    ESP_RETURN_ON_ERROR(read_reg_16(REG_MAN_ID, &msb, &lsb),
+                        TAG, "MAN ID read failed");
 
     uint16_t mid = (msb << 8) | lsb;
     if (mid != TMP468_MANUFACTURER_ID) {
@@ -54,11 +56,11 @@ esp_err_t TMP468::init() {
         return ESP_ERR_INVALID_VERSION;
     }
 
-    ESP_RETURN_ON_ERROR(
-        write_reg(REG_CONFIG, 0x00),
-        TAG, "Config write failed");
+    // Continuous conversion
+    ESP_RETURN_ON_ERROR(write_reg(REG_CONFIG, 0x00),
+                        TAG, "Config write failed");
 
-    // FIX: Offset/N-Factor Reset (Datasheet korrekt)
+    // Reset HW calibration (same philosophy as Tmp451Mux)
     for (uint8_t ch = 1; ch <= 8; ch++) {
         write_reg(TMP468_OFFSET_REG(ch), 0x00);
         write_reg(TMP468_NFACTOR_REG(ch), 0x00);
@@ -68,9 +70,18 @@ esp_err_t TMP468::init() {
     return ESP_OK;
 }
 
-// ---------------------------------------------------------------------------
-// Temperatur
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Status / Health
+// -----------------------------------------------------------------------------
+
+bool TMP468::readStatus(uint8_t* out_status) {
+    if (!out_status) return false;
+    return read_reg(REG_STATUS, out_status) == ESP_OK;
+}
+
+// -----------------------------------------------------------------------------
+// Temperature access
+// -----------------------------------------------------------------------------
 
 bool TMP468::readRawData(uint8_t channel, uint8_t &msb, uint8_t &lsb) {
     if (channel > 8) return false;
@@ -94,28 +105,40 @@ float TMP468::read_remote_celsius(uint8_t channel) {
 
 bool TMP468::readLocalTemp(float* out_C) {
     if (!out_C) return false;
-    *out_C = read_local_celsius();
-    return !isnan(*out_C);
+    float v = read_local_celsius();
+    if (isnan(v)) return false;
+    *out_C = v;
+    return true;
 }
 
-// ---------------------------------------------------------------------------
-// ASIC API
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// ASIC API (matches Tmp451Mux semantics)
+// -----------------------------------------------------------------------------
 
 float TMP468::get_temperature(int asic_index) {
     if (asic_index < 0 || asic_index >= m_asicCount)
         return NAN;
 
+    // NOTE: ASIC 0 → Remote Channel 1
     uint8_t channel = asic_index + 1;
 
+    // ADC settling (TMP468 has no MUX but still benefits)
     vTaskDelay(pdMS_TO_TICKS(m_wait_after_switch_ms));
+
+    // Dummy read (same reason as Tmp451Mux)
     (void)read_remote_celsius(channel);
+
     vTaskDelay(pdMS_TO_TICKS(m_wait_before_read_ms));
 
     return temp_correct(channel, read_remote_celsius(channel));
 }
 
+// -----------------------------------------------------------------------------
+// Calibration
+// -----------------------------------------------------------------------------
+
 float TMP468::temp_correct(uint8_t ch, float t) {
     if (isnan(t) || ch < 1 || ch > 8) return t;
-    return ((t - 30.0f) * gCal.scale + 30.0f) + gCal.off[ch - 1];
+    return ((t - 30.0f) * gCal.scale + 30.0f)
+           + gCal.off[ch - 1];
 }
