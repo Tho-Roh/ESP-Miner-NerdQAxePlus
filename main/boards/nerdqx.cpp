@@ -73,21 +73,20 @@ NerdQX::NerdQX() : NerdQaxePlus2() {
 }
 
 bool NerdQX::initBoard() {
-    bool ret = NerdQaxePlus::initBoard();
-
-    // --- 1. Versuche TMP468 ---
-    static TMP468 tmp468;
+    bool ret = NerdQaxePlus2::initBoard();
+    
+    // Versuch 1: TMP468 (Neues Design)
+    static TMP468 tmp468(0x48, I2C_MASTER_NUM, m_asicCount);
     if (tmp468.init() == ESP_OK) {
-        ESP_LOGI(TAG, "TMP468 detected");
         m_tempMux = &tmp468;
         m_hasTMux = true;
         return ret;
     }
 
-    // --- 2. Fallback: TMP451 + MUX ---
-    static Tmp451Mux tmp451;
+    // Versuch 2: TMP451 + GPIO Mux (Legacy Design)
+    // GPIO 2/3 wie in deiner tmp451_mux.h definiert
+    static Tmp451Mux tmp451(GPIO_NUM_2, GPIO_NUM_3, 0x4C, true);
     if (tmp451.init() == ESP_OK) {
-        ESP_LOGI(TAG, "TMP451 MUX detected");
         m_tempMux = &tmp451;
         m_hasTMux = true;
         return ret;
@@ -101,7 +100,7 @@ bool NerdQX::initBoard() {
         m_absMaxAsicFrequency = 495;
 
         // reload settings to apply new absMax values
-        loadSettings();
+        loadSettings(); //ggf ausklammern
         // return result from initBoard
     return ret;
 }
