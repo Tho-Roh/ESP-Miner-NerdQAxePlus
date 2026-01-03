@@ -41,17 +41,19 @@
 class TMP468 : public ITempMux {
 public:
     // Übergabe des I2C-Ports (Standard: I2C_NUM_0)
-    TMP468(uint8_t addr = TMP468_ADDR, i2c_port_t port = I2C_NUM_0);
+    TMP468(uint8_t addr,
+           i2c_port_t port,
+           uint8_t asicCount);
 
     // Initialisiert den Sensor (setzt Konfiguration & prüft ID)
-    esp_err_t init();
+    esp_err_t init() override;
 
     // channel 0 = lokal, 1–8 = remote
-    float get_temperature(int channel);
+    float get_temperature(int asic_index) override;
 
     // Rohdaten (MSB/LSB) direkt lesen
     bool readRawData(uint8_t channel, uint8_t &msb, uint8_t &lsb);
-    bool  readLocalTemp(float* out_C);     // Local temperature (°C)
+    bool readLocalTemp(float* out_C) override;     // Local temperature (°C)
 
 private:
     uint8_t m_addr;
@@ -79,6 +81,7 @@ private:
 };
 
 #endif
+
 
 
 
