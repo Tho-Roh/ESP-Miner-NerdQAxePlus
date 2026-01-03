@@ -9,9 +9,8 @@
 #include "./drivers/TMP468.h"
 #include "./drivers/tmp468_dual_mux.h"
 
-static TMP468 tmp468_a(0x48, I2C_NUM_0, 4);
-static TMP468 tmp468_b(0x49, I2C_NUM_0, 4);
-
+static TMP468 tmp468_a(0x48, I2C_MASTER_NUM, 4); // Erste 4 ASICs
+static TMP468 tmp468_b(0x49, I2C_MASTER_NUM, 4); // Zweite 4 ASICs
 static Tmp468DualMux tempMux(&tmp468_a, &tmp468_b);
 
 static const char* TAG = "nerdoctaxegamma";
@@ -116,7 +115,6 @@ bool NerdOctaxeGamma::initBoard() {
         m_hasTMux = true;
     } else {
         ESP_LOGE(TAG, "Dual TMP468 init failed – BOTH sensors required!");
-        m_tempMux = nullptr;
         m_hasTMux = false;
     }
 
