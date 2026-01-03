@@ -17,30 +17,34 @@ esp_err_t Tmp468DualMux::init() {
 }
 
 float Tmp468DualMux::get_temperature(int index) {
-    /*
-     * index semantics:
-     *   -1 → local temperature (sensor 0)
-     *   0..7 → ASIC temperatures
-     */
 
+    // Einheitliche ITempMux-Semantik
+    // index == -1 liefert die interne (Local) Temperatur von TMP468 #0.
+    // Damit ist das Verhalten identisch zu NerdHaxeGamma & NerdQX.
     if (index == -1) {
-        return m_sensors[0]->get_temperature(-1);
+        return m_a->get_temperature(-1);   // TMP468 #0 local sensor
     }
+
+    if (!m_hasA || !m_hasB)
+        return NAN;
 
     if (index < 0 || index >= 8)
         return NAN;
 
-    uint8_t sensor  = index / 4;        // 0 or 1
-    uint8_t asicIdx = index % 4;         // 0..3
+    if (index < 4) {
+        return m_a->get_temperature(index);
+    }
 
-    return m_sensors[sensor]->get_temperature(asicIdx);
+    return m_b->get_temperature(index - 4);
 }
 
 bool Tmp468DualMux::readLocalTemp(float* out_C) {
-    if (!out_C)
+    if (!out_C || !m_hasA)
         return false;
 
-    float t = m_sensors[0]->get_temperature(-1);
+    // Local temperature = Board / Ambient
+    // Wird immer von TMP468 #0 geliefert
+    float t = m_a->get_temperature(-1);
     if (isnan(t))
         return false;
 
