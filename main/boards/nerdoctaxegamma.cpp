@@ -14,9 +14,6 @@ static TMP468 tmp468_b(0x49, I2C_NUM_0, 4);
 
 static Tmp468DualMux tempMux(&tmp468_a, &tmp468_b);
 
-ITempMux* board_temp_mux() {
-    return &tempMux;
-}
 static const char* TAG = "nerdoctaxegamma";
 
 NerdOctaxeGamma::NerdOctaxeGamma() : NerdQaxePlus2() {
@@ -28,12 +25,6 @@ NerdOctaxeGamma::NerdOctaxeGamma() : NerdQaxePlus2() {
     m_asicMaxDifficulty = 4096;
     m_asicMinDifficulty = 1024;
     m_asicMinDifficultyDualPool = 256;
-
-     // use m_asicVoltage for init
-    m_initVoltageMillis = 0;
-
-    m_maxVin = 13.0;
-    m_minVin = 11.0;
 
      // use m_asicVoltage for init
     m_initVoltageMillis = 0;
@@ -107,4 +98,66 @@ float NerdOctaxeGamma::getVRTemp() {
     }
 
     return vrTemp;
+}
+
+/*
+ * initBoard()
+ *
+ * - ruft Basisklassen-Init auf
+ * - initialisiert TMP468
+ * - kein Fallback auf TMP451 (Hardware nicht vorhanden)
+ */
+bool NerdOctaxeGamma::initBoard() {
+    bool ret = NerdQaxePlus2::initBoard();
+
+    esp_err_t err = tempMux.init();
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Dual TMP468 detected");
+
+        m_tempMux = &tempMux;
+        m_hasTMux = true;
+        return ret;
+    }
+
+    ESP_LOGE(TAG, "TMP468 init failed – temperature monitoring disabled!");
+    m_tempMux = nullptr;
+    m_hasTMux = false;
+
+    return ret;
+}
+
+/*
+ * requestChipTemps()
+ *
+ * - identisch zu NerdQX / NerdHaxeGamma
+ * - liest Temperaturen über ITempMux
+ * - Dual-TMP468 Mapping (intern):
+ *      ASIC 0–3 → TMP468 A (CH1–4)
+ *      ASIC 4–7 → TMP468 B (CH1–4)
+ */
+void NerdOctaxeGamma::requestChipTemps() {
+
+    // Im Shutdown sind LDOs aus → keine Messung möglich
+    if (m_shutdown) {
+        for (int i = 0; i < m_asicCount; i++) {
+            setChipTemp(i, 0.0f);
+        }
+        return;
+    }
+
+    // Kein Sensor vorhanden
+    if (!m_hasTMux || !m_tempMux) {
+        ESP_LOGE(TAG, "No temperature sensor available");
+        return;
+    }
+
+    for (int i = 0; i < m_asicCount; i++) {
+        float temp = m_tempMux->get_temperature(i);
+        // ESP_LOGI(TAG, "temperature of chip %d: %.2f", i, temp);
+
+        if (!isnan(temp)) {
+            setChipTemp(i, temp);
+        }
+    }
 }
