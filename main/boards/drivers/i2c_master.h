@@ -17,8 +17,17 @@ esp_err_t i2c_master_register_write_word(uint8_t device_address, uint8_t reg_add
 static inline esp_err_t i2c_master_read_reg(i2c_port_t port, uint8_t addr, uint8_t reg, uint8_t* data, size_t len) {
     return i2c_master_register_read(addr, reg, data, len);
 }
-static inline esp_err_t i2c_master_write_reg(i2c_port_t port, uint8_t addr, uint8_t reg, uint8_t* data, size_t len) {
-    if (len == 1) return i2c_master_register_write_byte(addr, reg, *data);
-    if (len == 2) return i2c_master_register_write_word(addr, reg, (data[0] << 8) | data[1]);
+static inline esp_err_t i2c_master_write_reg(i2c_port_t port, uint8_t addr, uint8_t reg, uint8_t* data, size_t len)
+{
+    if (len == 1) 
+        return i2c_master_register_write_byte(addr, reg, data[0]);
+
+    if (len == 2) {
+        // explizit zwei Byte schreiben (kein Word-Zwang!)
+        esp_err_t err = i2c_master_register_write_byte(addr, reg, data[0]);
+        if (err != ESP_OK) return err;
+        return i2c_master_register_write_byte(addr, reg + 1, data[1]);
+    }
+
     return ESP_ERR_NOT_SUPPORTED;
 }
