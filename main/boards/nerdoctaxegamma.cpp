@@ -110,19 +110,15 @@ float NerdOctaxeGamma::getVRTemp() {
 bool NerdOctaxeGamma::initBoard() {
     bool ret = NerdQaxePlus2::initBoard();
 
-    esp_err_t err = tempMux.init();
-
-    if (err == ESP_OK) {
-        ESP_LOGI(TAG, "Dual TMP468 detected");
-
+    if (tempMux.init() == ESP_OK) {
+        ESP_LOGI(TAG, "Dual TMP468 detected (both sensors OK)");
         m_tempMux = &tempMux;
         m_hasTMux = true;
-        return ret;
+    } else {
+        ESP_LOGE(TAG, "Dual TMP468 init failed – BOTH sensors required!");
+        m_tempMux = nullptr;
+        m_hasTMux = false;
     }
-
-    ESP_LOGE(TAG, "TMP468 init failed – temperature monitoring disabled!");
-    m_tempMux = nullptr;
-    m_hasTMux = false;
 
     return ret;
 }
