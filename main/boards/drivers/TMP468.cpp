@@ -112,20 +112,34 @@ bool TMP468::readLocalTemp(float* out_C) {
 }
 
 // -----------------------------------------------------------------------------
-// ASIC API (matches Tmp451Mux semantics)
+// ASIC / Channel API
 // -----------------------------------------------------------------------------
 
-float TMP468::get_temperature(int asic_index) {
-    if (asic_index < 0 || asic_index >= m_asicCount)
+float TMP468::get_temperature(int index) {
+    /*
+     * FIX / CHANGE:
+     * Einheitliche ITempMux-Semantik (wie Tmp451Mux)
+     *
+     * index == -1 → Local / Internal Sensor
+     * index >= 0  → ASIC-Index → Remote Channel (index + 1)
+     */
+
+    // --- Local temperature ---
+    if (index == -1) {
+        return read_local_celsius();   // <<< FEHLTE VORHER
+    }
+
+    // --- Remote / ASIC temperature ---
+    if (index < 0 || index >= m_asicCount)
         return NAN;
 
-    // NOTE: ASIC 0 → Remote Channel 1
-    uint8_t channel = asic_index + 1;
+    uint8_t channel = index + 1;  // ASIC 0 → TMP468 Channel 1
 
-    // ADC settling (TMP468 has no MUX but still benefits)
+    // TMP468 läuft im Continuous Mode,
+    // trotzdem kurze Delays für ADC-Einschwingen
     vTaskDelay(pdMS_TO_TICKS(m_wait_after_switch_ms));
 
-    // Dummy read (same reason as Tmp451Mux)
+    // Dummy-Read (analog TMP451 → erste Messung verwerfen)
     (void)read_remote_celsius(channel);
 
     vTaskDelay(pdMS_TO_TICKS(m_wait_before_read_ms));
@@ -142,3 +156,4 @@ float TMP468::temp_correct(uint8_t ch, float t) {
     return ((t - 30.0f) * gCal.scale + 30.0f)
            + gCal.off[ch - 1];
 }
+
