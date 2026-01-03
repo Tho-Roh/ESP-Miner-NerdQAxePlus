@@ -6,7 +6,17 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "./drivers/TMP468.h"
+#include "./drivers/tmp468_dual_mux.h"
 
+static TMP468 tmp468_a(0x48, I2C_NUM_0, 4);
+static TMP468 tmp468_b(0x49, I2C_NUM_0, 4);
+
+static Tmp468DualMux tempMux(&tmp468_a, &tmp468_b);
+
+ITempMux* board_temp_mux() {
+    return &tempMux;
+}
 static const char* TAG = "nerdoctaxegamma";
 
 NerdOctaxeGamma::NerdOctaxeGamma() : NerdQaxePlus2() {
