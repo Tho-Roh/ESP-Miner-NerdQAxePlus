@@ -10,16 +10,23 @@ const char *TAG = "emc2302";
 
 esp_err_t EMC2302_set_fan_speed(int channel, float percent)
 {
-    int value = (int) (percent * 255.0 + 0.5);
-    value = (value > 255) ? 255 : value;
+    // FIX: percent is 0–100
+    if (percent < 0.0f) percent = 0.0f;
+    if (percent > 100.0f) percent = 100.0f;
 
-    // 0: fan2, 1: fan1
-    uint8_t base = !channel ? EMC2302_FAN2 : EMC2302_FAN1;
+    int value = (int)((percent / 100.0f) * 255.0f + 0.5f);
 
-    esp_err_t err;
+    // FIX: intuitive mapping (0 = FAN1, 1 = FAN2)
+    uint8_t base = channel ? EMC2302_FAN2 : EMC2302_FAN1;
 
-    ESP_LOGI(TAG, "setting fan %d speed to %.2f%% (0x%02x)", channel, percent * 100.0, value);
-    return i2c_master_register_write_byte(EMC2302_ADDR, base + EMC2302_OFS_FAN_SETTING, (uint8_t) value);
+    ESP_LOGI(TAG,
+             "setting fan %d speed to %.1f%% (0x%02x)",
+             channel, percent, value);
+
+    return i2c_master_register_write_byte(
+        EMC2302_ADDR,
+        base + EMC2302_OFS_FAN_SETTING,
+        (uint8_t)value);
 }
 
 esp_err_t EMC2302_get_fan_speed(int channel, uint16_t *dst)
