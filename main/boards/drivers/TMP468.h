@@ -78,11 +78,15 @@ private:
     float temp_correct(uint8_t ch, float t_meas);
 
     // TMP468: signed 13-bit, LSB = 0.0625 °C
-    static inline float make_temp_c(uint8_t msb, uint8_t lsb) {
-        int16_t raw = (msb << 8) | lsb;
-        return (raw >> 4) * 0.0625f;
+    static inline float make_temp_c(uint8_t msb, uint8_t lsb)
+    {
+    // FIX: proper signed 13-bit sign extension
+    int16_t raw = ((int16_t)msb << 8) | lsb;
+    raw >>= 4;
+    return raw * 0.0625f;
     }
 };
 
 #endif
+
 
