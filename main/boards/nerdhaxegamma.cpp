@@ -42,10 +42,12 @@ NerdHaxeGamma::NerdHaxeGamma() : NerdQaxePlus2() {
  * - initialisiert TMP468
  * - kein Fallback auf TMP451 (Hardware nicht vorhanden)
  */
-bool NerdHaxeGamma::initBoard() {
+bool NerdHaxeGamma::initBoard()
+{
     bool ret = NerdQaxePlus2::initBoard();
 
-    static TMP468 tmp468;
+    // FIX: TMP468 requires addr, port and ASIC count
+    static TMP468 tmp468(TMP468_ADDR, I2C_MASTER_NUM, m_asicCount);
 
     if (tmp468.init() == ESP_OK) {
         ESP_LOGI(TAG, "TMP468 detected");
@@ -57,7 +59,6 @@ bool NerdHaxeGamma::initBoard() {
     ESP_LOGE(TAG, "TMP468 not detected – temperature monitoring disabled!");
     m_hasTMux = false;
     m_tempMux = nullptr;
-
     return ret;
 }
 
