@@ -65,30 +65,36 @@ NerdaxeGamma::NerdaxeGamma() : NerdAxe() {
 }
 
 
-bool NerdHaxeGamma::initBoard()
+bool NerdaxeGamma::initBoard()
 {
-    bool ret = NerdQaxePlus2::initBoard();
+    Board::initBoard();
 
-    // FIX: TMP468 requires addr, port and ASIC count
-    static TMP468 tmp468(TMP468_ADDR, I2C_MASTER_NUM, m_asicCount);
+    ADC_init();
+    SERIAL_init();
 
-    if (tmp468.init() == ESP_OK) {
-        ESP_LOGI(TAG, "TMP468 detected");
-        m_tempMux = &tmp468;
-        m_hasTMux = true;
-        return ret;
+    // Init I2C
+    if (i2c_master_init() != ESP_OK) {
+        ESP_LOGE(TAG, "I2C initializing failed");
+        return false;
     }
 
-    ESP_LOGE(TAG, "TMP468 not detected – temperature monitoring disabled!");
-    m_hasTMux = false;
-    m_tempMux = nullptr;
-    return ret;
-}
+    EMC2101_init(m_fanInvertPolarity);
+    EMC2101_set_ideality_factor(EMC2101_IDEALITY_1_0319);
+    EMC2101_set_beta_compensation(EMC2101_BETA_11);
+    setFanSpeed(m_fanPerc);
 
-void NerdaxeGamma::shutdown() {
+    //Init voltage controller
+    if (TPS546_init() != ESP_OK) {
+        ESP_LOGE(TAG, "TPS546 init failed!");
+        return ESP_FAIL;
+    }
     setVoltage(0.0);
 
-    Board::shutdown();
+    gpio_pad_select_gpio(BM1370_RST_PIN);
+    gpio_set_direction(BM1370_RST_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_level(BM1370_RST_PIN, 0);
+
+    return true;
 }
 
 bool NerdaxeGamma::initAsics() {
