@@ -76,7 +76,7 @@ bool NerdQX::initBoard() {
     bool ret = NerdQaxePlus::initBoard();
 
     // --- 1. Versuche TMP468 ---
-    static TMP468 tmp468;
+    static TMP468 tmp468(0x4B, m_asicCount);
     if (tmp468.init() == ESP_OK) {
         ESP_LOGI(TAG, "TMP468 detected");
         m_tempMux = &tmp468;
