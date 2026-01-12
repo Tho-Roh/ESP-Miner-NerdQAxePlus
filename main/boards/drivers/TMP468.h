@@ -69,9 +69,22 @@ private:
     uint32_t m_wait_after_switch_ms = 20;
     uint32_t m_wait_before_read_ms  = 50;
 
-    esp_err_t read_reg(uint8_t reg, uint8_t* out);
-    esp_err_t write_reg(uint8_t reg, uint8_t val);
-    esp_err_t read_reg_16(uint8_t reg, uint8_t* msb, uint8_t* lsb);
+esp_err_t TMP468::read_reg(uint8_t reg, uint8_t* out) {
+    return i2c_master_register_read(m_addr, reg, out, 1);
+}
+
+esp_err_t TMP468::write_reg(uint8_t reg, uint8_t val) {
+    return i2c_master_register_write_byte(m_addr, reg, val);
+}
+
+esp_err_t TMP468::read_reg_16(uint8_t reg, uint8_t* msb, uint8_t* lsb) {
+    uint8_t buf[2];
+    esp_err_t err = i2c_master_register_read(m_addr, reg, buf, 2);
+    if (err != ESP_OK) return err;
+    *msb = buf[0];
+    *lsb = buf[1];
+    return ESP_OK;
+}
 
     float read_local_celsius();
     float read_remote_celsius(uint8_t channel);
@@ -85,4 +98,5 @@ private:
 };
 
 #endif
+
 
