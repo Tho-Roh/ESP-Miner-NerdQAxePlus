@@ -9,8 +9,8 @@
 #include "./drivers/TMP468.h"
 #include "./drivers/tmp468_dual_mux.h"
 
-static TMP468 tmp468_a(0x48, I2C_NUM_0, 4);
-static TMP468 tmp468_b(0x49, I2C_NUM_0, 4);
+static TMP468 tmp468_a(0x4A, I2C_NUM_0, 4);
+static TMP468 tmp468_b(0x4B, I2C_NUM_0, 4);
 
 static Tmp468DualMux tempMux(&tmp468_a, &tmp468_b);
 
