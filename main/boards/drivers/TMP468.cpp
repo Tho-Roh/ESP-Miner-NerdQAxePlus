@@ -84,7 +84,7 @@ bool TMP468::readStatus(uint8_t* out_status) {
 // -----------------------------------------------------------------------------
 
 bool TMP468::readRawData(uint8_t channel, uint8_t &msb, uint8_t &lsb) {
-    if (channel > 8) return false;
+    if (channel < 1 || channel > 8) return false;
     return read_reg_16(REG_TEMP_BASE + channel, &msb, &lsb) == ESP_OK;
 }
 
@@ -126,7 +126,7 @@ float TMP468::get_temperature(int index) {
 
     // --- Local temperature ---
     if (index == -1) {
-        return read_local_celsius();   // <<< FEHLTE VORHER
+        return read_local_celsius();
     }
 
     // --- Remote / ASIC temperature ---
@@ -156,4 +156,5 @@ float TMP468::temp_correct(uint8_t ch, float t) {
     return ((t - 30.0f) * gCal.scale + 30.0f)
            + gCal.off[ch - 1];
 }
+
 
