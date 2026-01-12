@@ -42,24 +42,24 @@ NerdQaxePlus2::NerdQaxePlus2() : NerdQaxePlus() {
     m_hasHashCounter = true;
     m_vrFrequency = m_defaultVrFrequency = m_asics->getDefaultVrFrequency();
 }
-
-float NerdQaxePlus2::getTemperature(int index) {
-    float temp = NerdQaxePlus::getTemperature(index);
-    if (!temp) {
-        return 0.0;
-    }
-    // we can't read the real chip temps but this should be about right
-    return temp + 10.0f; // offset of 10°C
-}
-
-// ggf erneuern; isnan() ist hier entscheidend, Verhalten bleibt rückwärtskompatibel
+// alter code
 //float NerdQaxePlus2::getTemperature(int index) {
 //    float temp = NerdQaxePlus::getTemperature(index);
-//    if (isnan(temp) || temp == 0.0f) {
-//        return 0.0f;
+//    if (!temp) {
+//        return 0.0;
 //    }
-//    return temp + 10.0f;
+    // we can't read the real chip temps but this should be about right
+//    return temp + 10.0f; // offset of 10°C
 //}
+
+// neuer code, isnan() ist hier entscheidend, Verhalten bleibt rückwärtskompatibel
+float NerdQaxePlus2::getTemperature(int index) {
+    float temp = NerdQaxePlus::getTemperature(index);
+    if (isnan(temp) || temp == 0.0f) {
+        return 0.0f;
+    }
+    return temp + 10.0f;
+}
 
 void NerdQaxePlus2::requestChipTemps() {
     // NOP
