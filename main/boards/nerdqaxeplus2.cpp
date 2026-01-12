@@ -52,7 +52,7 @@ float NerdQaxePlus2::getTemperature(int index) {
     return temp + 10.0f; // offset of 10°C
 }
 
-// ggf erneuern
+// ggf erneuern; isnan() ist hier entscheidend, Verhalten bleibt rückwärtskompatibel
 //float NerdQaxePlus2::getTemperature(int index) {
 //    float temp = NerdQaxePlus::getTemperature(index);
 //    if (isnan(temp) || temp == 0.0f) {
