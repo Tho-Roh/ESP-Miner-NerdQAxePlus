@@ -19,7 +19,7 @@
  * ESP32-native implementation (continuous conversion)
  */
 
-#define TMP468_ADDR              0x48
+#define TMP468_ADDR              0x4B
 #define TMP468_MANUFACTURER_ID   0x5449
 
 // -----------------------------------------------------------------------------
@@ -98,5 +98,6 @@ esp_err_t TMP468::read_reg_16(uint8_t reg, uint8_t* msb, uint8_t* lsb) {
 };
 
 #endif
+
 
 
