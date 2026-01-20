@@ -45,7 +45,7 @@ NerdHaxeGamma::NerdHaxeGamma() : NerdQaxePlus2() {
 bool NerdHaxeGamma::initBoard() {
     bool ret = NerdQaxePlus2::initBoard();
 
-    static TMP468 tmp468(TMP468_ADDR, I2C_NUM_0, m_asicCount);
+static TMP468 tmp468(TMP468_ADDR, m_asicCount);
 
     if (tmp468.init() == ESP_OK) {
         ESP_LOGI(TAG, "TMP468 detected");
