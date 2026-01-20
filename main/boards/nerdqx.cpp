@@ -74,7 +74,7 @@ NerdQX::NerdQX() : NerdQaxePlus2() {
 
 bool NerdQX::initBoard()
 {
-    bool ret = NerdQaxePlus::initBoard();
+    bool ret = NerdQaxePlus2::initBoard();
 
     // --- 1. TMP451 + externer MUX ---
     static Tmp451Mux tmp451;
