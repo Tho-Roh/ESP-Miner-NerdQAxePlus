@@ -1,8 +1,9 @@
 #include "TMP468.h"
 #include <esp_check.h>
+#include <math.h>
 
 // -----------------------------------------------------------------------------
-// Software Calibration (matches Tmp451Mux behaviour)
+// Software-Kalibrierung (identisch zu TMP451Mux)
 // -----------------------------------------------------------------------------
 
 struct TempCal {
@@ -16,24 +17,27 @@ static TempCal gCal = {
       -29.5f, -29.5f, -29.5f, -29.5f }
 };
 
-TMP468::TMP468(uint8_t addr, i2c_port_t port, uint8_t asicCount)
-    : m_addr(addr), m_port(port), m_asicCount(asicCount) {}
+TMP468::TMP468(uint8_t addr, uint8_t asicCount)
+    : m_addr(addr), m_asicCount(asicCount) {}
 
 // -----------------------------------------------------------------------------
-// I2C helpers
+// I2C helpers (ESP-Miner Style)
 // -----------------------------------------------------------------------------
 
-esp_err_t TMP468::read_reg(uint8_t reg, uint8_t* out) {
-    return i2c_master_read_reg(m_port, m_addr, reg, out, 1);
+esp_err_t TMP468::read_reg(uint8_t reg, uint8_t* out)
+{
+    return i2c_master_register_read(m_addr, reg, out, 1);
 }
 
-esp_err_t TMP468::write_reg(uint8_t reg, uint8_t val) {
-    return i2c_master_write_reg(m_port, m_addr, reg, &val, 1);
+esp_err_t TMP468::write_reg(uint8_t reg, uint8_t val)
+{
+    return i2c_master_register_write_byte(m_addr, reg, val);
 }
 
-esp_err_t TMP468::read_reg_16(uint8_t reg, uint8_t* msb, uint8_t* lsb) {
+esp_err_t TMP468::read_reg_16(uint8_t reg, uint8_t* msb, uint8_t* lsb)
+{
     uint8_t buf[2];
-    esp_err_t err = i2c_master_read_reg(m_port, m_addr, reg, buf, 2);
+    esp_err_t err = i2c_master_register_read(m_addr, reg, buf, 2);
     if (err != ESP_OK) return err;
     *msb = buf[0];
     *lsb = buf[1];
@@ -41,26 +45,31 @@ esp_err_t TMP468::read_reg_16(uint8_t reg, uint8_t* msb, uint8_t* lsb) {
 }
 
 // -----------------------------------------------------------------------------
-// Init
+// Init / Detection
 // -----------------------------------------------------------------------------
 
-esp_err_t TMP468::init() {
+esp_err_t TMP468::init()
+{
     uint8_t msb, lsb;
 
-    ESP_RETURN_ON_ERROR(read_reg_16(REG_MAN_ID, &msb, &lsb),
-                        TAG, "MAN ID read failed");
+    ESP_RETURN_ON_ERROR(
+        read_reg_16(TMP468_REG_MAN_ID, &msb, &lsb),
+        TAG, "Manufacturer ID read failed"
+    );
 
     uint16_t mid = (msb << 8) | lsb;
     if (mid != TMP468_MANUFACTURER_ID) {
         ESP_LOGE(TAG, "Manufacturer ID mismatch: 0x%04X", mid);
-        return ESP_ERR_INVALID_VERSION;
+        return ESP_ERR_NOT_FOUND;  // wichtig für Board-Fallback
     }
 
-    // Continuous conversion
-    ESP_RETURN_ON_ERROR(write_reg(REG_CONFIG, 0x00),
-                        TAG, "Config write failed");
+    // Continuous Conversion Mode
+    ESP_RETURN_ON_ERROR(
+        write_reg(TMP468_REG_CONFIG, 0x00),
+        TAG, "Config write failed"
+    );
 
-    // Reset HW calibration (same philosophy as Tmp451Mux)
+    // HW-Kalibrierung zurücksetzen
     for (uint8_t ch = 1; ch <= 8; ch++) {
         write_reg(TMP468_OFFSET_REG(ch), 0x00);
         write_reg(TMP468_NFACTOR_REG(ch), 0x00);
@@ -71,39 +80,38 @@ esp_err_t TMP468::init() {
 }
 
 // -----------------------------------------------------------------------------
-// Status / Health
+// Status
 // -----------------------------------------------------------------------------
 
-bool TMP468::readStatus(uint8_t* out_status) {
+bool TMP468::readStatus(uint8_t* out_status)
+{
     if (!out_status) return false;
-    return read_reg(REG_STATUS, out_status) == ESP_OK;
+    return read_reg(TMP468_REG_STATUS, out_status) == ESP_OK;
 }
 
 // -----------------------------------------------------------------------------
-// Temperature access
+// Raw temperature access
 // -----------------------------------------------------------------------------
 
-bool TMP468::readRawData(uint8_t channel, uint8_t &msb, uint8_t &lsb) {
-    if (channel < 1 || channel > 8) return false;
-    return read_reg_16(REG_TEMP_BASE + channel, &msb, &lsb) == ESP_OK;
-}
-
-float TMP468::read_local_celsius() {
+float TMP468::read_local_celsius()
+{
     uint8_t msb, lsb;
-    if (read_reg_16(REG_TEMP_BASE, &msb, &lsb) == ESP_OK)
+    if (read_reg_16(TMP468_REG_TEMP_BASE, &msb, &lsb) == ESP_OK)
         return make_temp_c(msb, lsb);
     return NAN;
 }
 
-float TMP468::read_remote_celsius(uint8_t channel) {
+float TMP468::read_remote_celsius(uint8_t channel)
+{
     if (channel < 1 || channel > 8) return NAN;
     uint8_t msb, lsb;
-    if (read_reg_16(REG_TEMP_BASE + channel, &msb, &lsb) == ESP_OK)
+    if (read_reg_16(TMP468_REG_TEMP_BASE + channel, &msb, &lsb) == ESP_OK)
         return make_temp_c(msb, lsb);
     return NAN;
 }
 
-bool TMP468::readLocalTemp(float* out_C) {
+bool TMP468::readLocalTemp(float* out_C)
+{
     if (!out_C) return false;
     float v = read_local_celsius();
     if (isnan(v)) return false;
@@ -112,34 +120,26 @@ bool TMP468::readLocalTemp(float* out_C) {
 }
 
 // -----------------------------------------------------------------------------
-// ASIC / Channel API
+// ITempMux API
 // -----------------------------------------------------------------------------
 
-float TMP468::get_temperature(int index) {
-    /*
-     * FIX / CHANGE:
-     * Einheitliche ITempMux-Semantik (wie Tmp451Mux)
-     *
-     * index == -1 → Local / Internal Sensor
-     * index >= 0  → ASIC-Index → Remote Channel (index + 1)
-     */
-
-    // --- Local temperature ---
+float TMP468::get_temperature(int index)
+{
+    // Local sensor
     if (index == -1) {
         return read_local_celsius();
     }
 
-    // --- Remote / ASIC temperature ---
+    // ASIC index → Channel
     if (index < 0 || index >= m_asicCount)
         return NAN;
 
-    uint8_t channel = index + 1;  // ASIC 0 → TMP468 Channel 1
+    uint8_t channel = index + 1;
 
-    // TMP468 läuft im Continuous Mode,
-    // trotzdem kurze Delays für ADC-Einschwingen
+    // kurze Settling-Zeit
     vTaskDelay(pdMS_TO_TICKS(m_wait_after_switch_ms));
 
-    // Dummy-Read (analog TMP451 → erste Messung verwerfen)
+    // Dummy-Read (erste Messung verwerfen)
     (void)read_remote_celsius(channel);
 
     vTaskDelay(pdMS_TO_TICKS(m_wait_before_read_ms));
@@ -151,10 +151,10 @@ float TMP468::get_temperature(int index) {
 // Calibration
 // -----------------------------------------------------------------------------
 
-float TMP468::temp_correct(uint8_t ch, float t) {
+float TMP468::temp_correct(uint8_t ch, float t)
+{
     if (isnan(t) || ch < 1 || ch > 8) return t;
+
     return ((t - 30.0f) * gCal.scale + 30.0f)
            + gCal.off[ch - 1];
 }
-
-
