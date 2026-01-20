@@ -18,7 +18,6 @@
 
 #define TMP468_ADDR                 0x4B
 #define TMP468_MANUFACTURER_ID      0x5449
-#define TMP468_CONFIG_POR           0x9C   // Datasheet POR value
 
 // Register Map
 #define TMP468_REG_TEMP_BASE        0x00   // Local=0x00, Remote1..8=0x01..0x08
