@@ -18,6 +18,7 @@
 
 #define TMP468_ADDR                 0x4B
 #define TMP468_MANUFACTURER_ID      0x5449
+#define TMP468_CONFIG_POR           0x9C   // Datasheet POR value
 
 // Register Map
 #define TMP468_REG_TEMP_BASE        0x00   // Local=0x00, Remote1..8=0x01..0x08
@@ -67,3 +68,4 @@ private:
     uint32_t m_wait_after_switch_ms = 20;
     uint32_t m_wait_before_read_ms  = 50;
 };
+
