@@ -72,19 +72,11 @@ NerdQX::NerdQX() : NerdQaxePlus2() {
     m_vrFrequency = m_defaultVrFrequency = 35000;
 }
 
-bool NerdQX::initBoard() {
+bool NerdQX::initBoard()
+{
     bool ret = NerdQaxePlus::initBoard();
 
-    // --- 1. Versuche TMP468 ---
-    static TMP468 tmp468(0x4B, m_asicCount);
-    if (tmp468.init() == ESP_OK) {
-        ESP_LOGI(TAG, "TMP468 detected");
-        m_tempMux = &tmp468;
-        m_hasTMux = true;
-        return ret;
-    }
-
-    // --- 2. Fallback: TMP451 + MUX ---
+    // --- 1. TMP451 + externer MUX ---
     static Tmp451Mux tmp451;
     if (tmp451.init() == ESP_OK) {
         ESP_LOGI(TAG, "TMP451 MUX detected");
@@ -92,17 +84,26 @@ bool NerdQX::initBoard() {
         m_hasTMux = true;
         return ret;
     }
-    // --- 3. Kein Temperatursensor ---
-    ESP_LOGE(TAG, "TMUX probe failed. Assuming non-QX board; applying safety limits.");
-    m_hasTMux = false;
-    
-        // set new limits
-        m_absMaxAsicVoltageMillis = 1150;
-        m_absMaxAsicFrequency = 495;
 
-        // reload settings to apply new absMax values
-        loadSettings();
-        // return result from initBoard
+    // --- 2. TMP468 ---
+    static TMP468 tmp468(TMP468_ADDR, m_asicCount);
+    if (tmp468.init() == ESP_OK) {
+        ESP_LOGI(TAG, "TMP468 detected");
+        m_tempMux = &tmp468;
+        m_hasTMux = true;
+        return ret;
+    }
+
+    // --- 3. Kein Temperatursensor ---
+    ESP_LOGE(TAG, "No temperature sensor detected – applying safety limits");
+
+    m_hasTMux = false;
+    m_tempMux = nullptr;
+
+    m_absMaxAsicVoltageMillis = 1150;
+    m_absMaxAsicFrequency = 495;
+    loadSettings();
+
     return ret;
 }
 
