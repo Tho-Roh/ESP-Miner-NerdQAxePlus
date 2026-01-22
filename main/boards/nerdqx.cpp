@@ -132,7 +132,7 @@ bool NerdQX::initBoard()
     ESP_LOGE(TAG, "TMP451 init failed: %s (%d)", esp_err_to_name(e451), (int)e451);
 
     // --- 2. TMP468 ---
-    static TMP468 tmp468(TMP468_ADDR, 8); // TMP468_ADDR ist jetzt 0x4A
+    static TMP468 tmp468(TMP468_ADDR, 4); // TMP468_ADDR ist jetzt 0x4A
     esp_err_t e468 = tmp468.init();
     if (e468 == ESP_OK) {
         ESP_LOGE(TAG, "TMP468 detected");
