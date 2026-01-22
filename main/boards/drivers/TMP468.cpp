@@ -13,9 +13,8 @@ struct TempCal {
 };
 
 static TempCal gCal = {
-    1.09f,
-    { -29.5f, -29.5f, -29.5f, -29.5f,
-      -29.5f, -29.5f, -29.5f, -29.5f }
+    1.0f,
+    { 0,0,0,0,0,0,0,0 }
 };
 
 // -----------------------------------------------------------------------------
@@ -147,12 +146,13 @@ float TMP468::read_local_celsius()
 
 float TMP468::read_remote_celsius(uint8_t channel)
 {
-    if (channel < 1 || channel > 8)
-        return NAN;
+    if (channel < 1 || channel > 8) return NAN;
 
     uint16_t raw = 0;
-    if (read_word(TMP468_REG_TEMP_BASE + channel, &raw) != ESP_OK)
-        return NAN;
+    if (read_word(TMP468_REG_TEMP_BASE + channel, &raw) != ESP_OK) return NAN;
+
+    // TMP468: -256°C (0x8000) kann bei Remote-Fehler (z.B. short) auftreten
+    if (raw == 0x8000) return NAN;
 
     return make_temp_c(raw);
 }
@@ -215,4 +215,5 @@ esp_err_t TMP468::readAllTempsBlock(float outC[9])
     }
     return ESP_OK;
 }
+
 
