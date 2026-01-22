@@ -175,8 +175,12 @@ void NerdQX::requestChipTemps()
 
     for (int i = 0; i < m_asicCount; i++) {
         float temp = m_tempMux->get_temperature(i);
+        ESP_LOGE(TAG, "ASIC %d temp = %.2f", i, temp);
+
         if (!isnan(temp)) {
             setChipTemp(i, temp);
+        } else {
+            ESP_LOGE(TAG, "ASIC %d temp NAN", i);
         }
     }
 }
