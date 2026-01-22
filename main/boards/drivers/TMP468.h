@@ -76,8 +76,9 @@ private:
     static inline float make_temp_c(uint16_t raw16)
     {
         int16_t s = (int16_t)raw16;
-        return (s >> 4) * 0.0625f;
+        return (float)s / 128.0f;  // TMP468 Q7
     }
 
     uint32_t m_wait_before_read_ms = 5;
 };
+
