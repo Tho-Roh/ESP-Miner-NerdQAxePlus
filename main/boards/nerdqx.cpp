@@ -1,12 +1,21 @@
+// nerdqx.cpp
+#include <math.h>
+#include <type_traits>              // CHANGED: for debug static_assert if needed
+
 #include "board.h"
 #include "nerdqx.h"
 #include "nerdqaxeplus2.h"
 
+// CHANGED: Needed for I2C scan + esp_err_to_name
 #include "drivers/i2c_master.h"
 #include "esp_err.h"
 #include "esp_log.h"
 
-// Quick probe: START + address + STOP
+static const char* TAG = "NerdQX";
+
+// -----------------------------------------------------------------------------
+// DEBUG HELPERS (CHANGED): log everything as ESP_LOGE so it cannot be filtered out
+// -----------------------------------------------------------------------------
 static esp_err_t i2c_probe_addr(uint8_t addr7)
 {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
@@ -18,20 +27,23 @@ static esp_err_t i2c_probe_addr(uint8_t addr7)
     return err;
 }
 
-static void i2c_scan_bus()
+static void i2c_scan_bus_loge()
 {
-    ESP_LOGI(TAG, "I2C scan...");
+    ESP_LOGE(TAG, "I2C scan start...");
+    int found = 0;
     for (uint8_t a = 0x03; a < 0x78; a++) {
         if (i2c_probe_addr(a) == ESP_OK) {
-            ESP_LOGI(TAG, "I2C device @ 0x%02X", a);
+            ESP_LOGE(TAG, "I2C device ACK @ 0x%02X", a);
+            found++;
         }
     }
+    ESP_LOGE(TAG, "I2C scan done. Found=%d", found);
 }
 
-static const char* TAG="NerdQX";
-
+// -----------------------------------------------------------------------------
 // Carefully calibrated and tested settings for all operating modes.
 // >> Do NOT touch or change! <<
+// -----------------------------------------------------------------------------
 static int __attribute__((noinline))
 decode_m_ifault(int phases) {
     int tIxTech = (500/10) - (6*7) + (81/9);
@@ -102,38 +114,41 @@ bool NerdQX::initBoard()
 {
     bool ret = NerdQaxePlus2::initBoard();
 
-    i2c_scan_bus();  // DEBUG: zeigt dir sofort ob 0x4A/0x4C überhaupt ACK geben
+    // CHANGED: force this tag to at least ERROR output
+    esp_log_level_set(TAG, ESP_LOG_ERROR);
+
+    // CHANGED: I2C scan so we KNOW what ACKs on the bus
+    i2c_scan_bus_loge();
 
     // --- 1. TMP451 + externer MUX ---
     static Tmp451Mux tmp451;
     esp_err_t e451 = tmp451.init();
     if (e451 == ESP_OK) {
-        ESP_LOGI(TAG, "TMP451 MUX detected");
+        ESP_LOGE(TAG, "TMP451 MUX detected");
         m_tempMux = &tmp451;
         m_hasTMux = true;
         return ret;
     }
-    ESP_LOGW(TAG, "TMP451 init failed: %s", esp_err_to_name(e451));
+    ESP_LOGE(TAG, "TMP451 init failed: %s (%d)", esp_err_to_name(e451), (int)e451);
 
     // --- 2. TMP468 ---
-    static TMP468 tmp468(TMP468_ADDR, 8);
+    static TMP468 tmp468(TMP468_ADDR, 8); // TMP468_ADDR ist jetzt 0x4A
     esp_err_t e468 = tmp468.init();
     if (e468 == ESP_OK) {
-        ESP_LOGI(TAG, "TMP468 detected");
+        ESP_LOGE(TAG, "TMP468 detected");
         m_tempMux = &tmp468;
         m_hasTMux = true;
         return ret;
     }
-    ESP_LOGW(TAG, "TMP468 init failed: %s", esp_err_to_name(e468));
-
-    ESP_LOGE(TAG, "TMUX not detected.");
+    ESP_LOGE(TAG, "TMP468 init failed: %s (%d)", esp_err_to_name(e468), (int)e468);
 
     // --- 3. Kein Temperatursensor ---
-    ESP_LOGE(TAG, "No temperature sensor detected – applying safety limits");
+    ESP_LOGE(TAG, "TMUX not detected.");
 
     m_hasTMux = false;
     m_tempMux = nullptr;
 
+    // apply safety limits
     m_absMaxAsicVoltageMillis = 1150;
     m_absMaxAsicFrequency = 495;
     loadSettings();
@@ -141,9 +156,10 @@ bool NerdQX::initBoard()
     return ret;
 }
 
-void NerdQX::requestChipTemps() {
-    // in shutdown the LDOs are not powered and we can't
-    // measure the chip temps, so we reset it to 0 to prevent stale values
+void NerdQX::requestChipTemps()
+{
+    // In shutdown the LDOs are not powered and we can't measure chip temps,
+    // so reset to 0 to prevent stale values
     if (m_shutdown) {
         for (int i = 0; i < m_asicCount; i++) {
             setChipTemp(i, 0.0f);
@@ -159,7 +175,6 @@ void NerdQX::requestChipTemps() {
 
     for (int i = 0; i < m_asicCount; i++) {
         float temp = m_tempMux->get_temperature(i);
-        // ESP_LOGI(TAG, "temperature of chip %d: %.3f", i, temp);
         if (!isnan(temp)) {
             setChipTemp(i, temp);
         }
