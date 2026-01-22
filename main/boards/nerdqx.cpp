@@ -2,6 +2,32 @@
 #include "nerdqx.h"
 #include "nerdqaxeplus2.h"
 
+#include "drivers/i2c_master.h"
+#include "esp_err.h"
+#include "esp_log.h"
+
+// Quick probe: START + address + STOP
+static esp_err_t i2c_probe_addr(uint8_t addr7)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (addr7 << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_stop(cmd);
+    esp_err_t err = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, I2C_MASTER_TIMEOUT_TICKS);
+    i2c_cmd_link_delete(cmd);
+    return err;
+}
+
+static void i2c_scan_bus()
+{
+    ESP_LOGI(TAG, "I2C scan...");
+    for (uint8_t a = 0x03; a < 0x78; a++) {
+        if (i2c_probe_addr(a) == ESP_OK) {
+            ESP_LOGI(TAG, "I2C device @ 0x%02X", a);
+        }
+    }
+}
+
 static const char* TAG="NerdQX";
 
 // Carefully calibrated and tested settings for all operating modes.
