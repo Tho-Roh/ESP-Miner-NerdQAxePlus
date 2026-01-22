@@ -102,23 +102,31 @@ bool NerdQX::initBoard()
 {
     bool ret = NerdQaxePlus2::initBoard();
 
+    i2c_scan_bus();  // DEBUG: zeigt dir sofort ob 0x4A/0x4C überhaupt ACK geben
+
     // --- 1. TMP451 + externer MUX ---
     static Tmp451Mux tmp451;
-    if (tmp451.init() == ESP_OK) {
+    esp_err_t e451 = tmp451.init();
+    if (e451 == ESP_OK) {
         ESP_LOGI(TAG, "TMP451 MUX detected");
         m_tempMux = &tmp451;
         m_hasTMux = true;
         return ret;
     }
+    ESP_LOGW(TAG, "TMP451 init failed: %s", esp_err_to_name(e451));
 
     // --- 2. TMP468 ---
-    static TMP468 tmp468(TMP468_ADDR, 8); // TMP468_ADDR ist jetzt 0x4A
-    if (tmp468.init() == ESP_OK) {
+    static TMP468 tmp468(TMP468_ADDR, 8);
+    esp_err_t e468 = tmp468.init();
+    if (e468 == ESP_OK) {
         ESP_LOGI(TAG, "TMP468 detected");
         m_tempMux = &tmp468;
         m_hasTMux = true;
         return ret;
     }
+    ESP_LOGW(TAG, "TMP468 init failed: %s", esp_err_to_name(e468));
+
+    ESP_LOGE(TAG, "TMUX not detected.");
 
     // --- 3. Kein Temperatursensor ---
     ESP_LOGE(TAG, "No temperature sensor detected – applying safety limits");
