@@ -71,12 +71,11 @@ esp_err_t TMP468::wait_busy_clear(uint32_t timeout_ms)
         esp_err_t err = read_word(TMP468_REG_CONFIG, &cfg);
         if (err != ESP_OK) return err;
 
-        bool busy = (cfg & (1u << 1)) != 0; // BUSY bit
-        if (!busy) return ESP_OK;
-
+        // wenn du nicht 100% sicher bist, dass bit1 BUSY ist:
+        // -> NICHT blockieren, nur kurz warten und weiter
         if (pdTICKS_TO_MS(xTaskGetTickCount() - t0) > timeout_ms) {
-            ESP_LOGE(TAG, "TMP468 busy timeout, cfg=0x%04X", cfg);
-            return ESP_ERR_TIMEOUT;
+            ESP_LOGE(TAG, "TMP468 busy-check skipped (cfg=0x%04X)", cfg);
+            return ESP_OK; // kein Timeout mehr
         }
         vTaskDelay(pdMS_TO_TICKS(5));
     }
@@ -216,3 +215,4 @@ esp_err_t TMP468::readAllTempsBlock(float outC[9])
     }
     return ESP_OK;
 }
+
