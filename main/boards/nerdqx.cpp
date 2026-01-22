@@ -86,7 +86,7 @@ bool NerdQX::initBoard()
     }
 
     // --- 2. TMP468 ---
-static TMP468 tmp468(TMP468_ADDR, 8);
+    static TMP468 tmp468(TMP468_ADDR, 8); // TMP468_ADDR ist jetzt 0x4A
     if (tmp468.init() == ESP_OK) {
         ESP_LOGI(TAG, "TMP468 detected");
         m_tempMux = &tmp468;
