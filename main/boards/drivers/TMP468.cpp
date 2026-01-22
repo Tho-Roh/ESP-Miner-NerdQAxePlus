@@ -5,7 +5,7 @@
 #include <esp_check.h>
 
 // -----------------------------------------------------------------------------
-// Software calibration (wie bei TMP451, optional)
+// Optional: Software calibration (derzeit neutral)
 // -----------------------------------------------------------------------------
 struct TempCal {
     float scale;
@@ -22,7 +22,7 @@ TMP468::TMP468(uint8_t addr, uint8_t asicCount)
     : m_addr(addr), m_asicCount(asicCount) {}
 
 // -----------------------------------------------------------------------------
-// I2C helpers (WORD oriented – TMP468 requirement)
+// I2C helpers (TMP468 = 16-bit word-oriented)
 // -----------------------------------------------------------------------------
 esp_err_t TMP468::read_bytes(uint8_t reg, uint8_t* out, size_t len)
 {
@@ -47,61 +47,56 @@ esp_err_t TMP468::write_word(uint8_t reg, uint16_t val)
 }
 
 // -----------------------------------------------------------------------------
-// Lock / Reset helpers (datasheet: SBBA588)
+// Lock / Reset helpers (TI SBAA588)
 // -----------------------------------------------------------------------------
 esp_err_t TMP468::unlock()
 {
-    ESP_LOGE(TAG, "TMP468 unlock");
     return write_word(TMP468_REG_LOCK, TMP468_UNLOCK_KEY);
 }
 
 esp_err_t TMP468::soft_reset()
 {
-    ESP_LOGE(TAG, "TMP468 soft reset");
-    return write_word(TMP468_REG_SOFT_RESET, 0x8000); // bit15 = reset
+    // bit15 = soft reset
+    return write_word(TMP468_REG_SOFT_RESET, 0x8000);
 }
 
 esp_err_t TMP468::wait_busy_clear(uint32_t timeout_ms)
 {
-    const TickType_t t0 = xTaskGetTickCount();
+    TickType_t t0 = xTaskGetTickCount();
 
     while (true) {
         uint16_t cfg = 0;
-        esp_err_t err = read_word(TMP468_REG_CONFIG, &cfg);
-        if (err != ESP_OK) return err;
+        if (read_word(TMP468_REG_CONFIG, &cfg) != ESP_OK)
+            return ESP_FAIL;
 
-        // wenn du nicht 100% sicher bist, dass bit1 BUSY ist:
-        // -> NICHT blockieren, nur kurz warten und weiter
-        if (pdTICKS_TO_MS(xTaskGetTickCount() - t0) > timeout_ms) {
-            ESP_LOGE(TAG, "TMP468 busy-check skipped (cfg=0x%04X)", cfg);
-            return ESP_OK; // kein Timeout mehr
-        }
+        // BUSY-Bit ist laut Datasheet optional → wir nutzen Timeout
+        if (pdTICKS_TO_MS(xTaskGetTickCount() - t0) > timeout_ms)
+            return ESP_OK;
+
         vTaskDelay(pdMS_TO_TICKS(5));
     }
 }
 
 // -----------------------------------------------------------------------------
-// Init sequence (strictly per datasheet)
+// Init sequence (TI Datasheet compliant)
 // -----------------------------------------------------------------------------
 esp_err_t TMP468::init()
 {
-    ESP_LOGE(TAG, "TMP468 init start @0x%02X", m_addr);
+    ESP_LOGE(TAG, "TMP468 init start @0x%02X (ASICs=%u)", m_addr, m_asicCount);
 
     // --- Manufacturer ID ---
     uint16_t man = 0;
-    esp_err_t err = read_word(TMP468_REG_MAN_ID, &man);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "MAN_ID read failed: %s", esp_err_to_name(err));
-        return err;
-    }
+    ESP_RETURN_ON_ERROR(
+        read_word(TMP468_REG_MAN_ID, &man),
+        TAG, "read MAN_ID"
+    );
 
-    ESP_LOGE(TAG, "MAN_ID = 0x%04X", man);
     if (man != TMP468_MANUFACTURER_ID) {
-        ESP_LOGE(TAG, "MAN_ID mismatch (expected 0x%04X)", TMP468_MANUFACTURER_ID);
+        ESP_LOGE(TAG, "MAN_ID mismatch: 0x%04X", man);
         return ESP_ERR_NOT_FOUND;
     }
 
-    // --- Device ID (optional) ---
+    // --- Optional Device ID ---
     uint16_t dev = 0;
     if (read_word(TMP468_REG_DEVICE_ID, &dev) == ESP_OK) {
         ESP_LOGE(TAG, "DEV_ID = 0x%04X", dev);
@@ -113,16 +108,36 @@ esp_err_t TMP468::init()
     vTaskDelay(pdMS_TO_TICKS(5));
     ESP_RETURN_ON_ERROR(unlock(), TAG, "unlock after reset");
 
-    // --- Configuration (POR value from datasheet) ---
+    // -----------------------------------------------------------------
+    // Configuration Register (0x30)
+    // Bits 15..8 = REN8..REN1 (Remote Channel Enable)
+    // Bits  7..0 = conversion / averaging / flags (POR = 0x9C)
+    // -----------------------------------------------------------------
+    uint16_t enableMask;
+    if (m_asicCount >= 8) {
+        enableMask = 0xFF;
+    } else {
+        enableMask = (uint16_t)((1u << m_asicCount) - 1u);
+        // 4 ASICs -> 0x0F
+        // 6 ASICs -> 0x3F
+    }
+
+    uint16_t cfg = (uint16_t)(enableMask << 8) | 0x009C;
+
     ESP_RETURN_ON_ERROR(
-        write_word(TMP468_REG_CONFIG, TMP468_CONFIG_POR),
-        TAG, "write config"
+        write_word(TMP468_REG_CONFIG, cfg),
+        TAG, "write CONFIG"
     );
 
-    // --- Optional: wait for conversions to settle ---
+    ESP_LOGE(TAG,
+        "TMP468 CONFIG=0x%04X (REN mask=0x%02X)",
+        cfg, enableMask
+    );
+
+    // Optional settle delay
     (void)wait_busy_clear(250);
 
-    // --- Clear offsets & n-factors (word registers!) ---
+    // --- Clear offsets & n-factors ---
     for (uint8_t ch = 1; ch <= 8; ch++) {
         write_word(TMP468_OFFSET_REG(ch),  0x0000);
         write_word(TMP468_NFACTOR_REG(ch), 0x0000);
@@ -146,13 +161,16 @@ float TMP468::read_local_celsius()
 
 float TMP468::read_remote_celsius(uint8_t channel)
 {
-    if (channel < 1 || channel > 8) return NAN;
+    if (channel < 1 || channel > 8)
+        return NAN;
 
     uint16_t raw = 0;
-    if (read_word(TMP468_REG_TEMP_BASE + channel, &raw) != ESP_OK) return NAN;
+    if (read_word(TMP468_REG_TEMP_BASE + channel, &raw) != ESP_OK)
+        return NAN;
 
-    // TMP468: -256°C (0x8000) kann bei Remote-Fehler (z.B. short) auftreten
-    if (raw == 0x8000) return NAN;
+    // TI Datasheet: 0x8000 = invalid / open / short
+    if (raw == 0x8000 || raw == 0x0000)
+        return NAN;
 
     return make_temp_c(raw);
 }
@@ -176,7 +194,7 @@ float TMP468::get_temperature(int index)
     if (index < 0 || index >= m_asicCount)
         return NAN;
 
-    uint8_t ch = static_cast<uint8_t>(index + 1);
+    uint8_t ch = (uint8_t)(index + 1);
     vTaskDelay(pdMS_TO_TICKS(m_wait_before_read_ms));
 
     float raw = read_remote_celsius(ch);
@@ -209,11 +227,14 @@ esp_err_t TMP468::readAllTempsBlock(float outC[9])
     if (err != ESP_OK) return err;
 
     for (int i = 0; i < 9; i++) {
-        uint16_t raw = (uint16_t(buf[i * 2]) << 8) |
-                        uint16_t(buf[i * 2 + 1]);
-        outC[i] = make_temp_c(raw);
+        uint16_t raw =
+            (uint16_t(buf[i * 2]) << 8) |
+             uint16_t(buf[i * 2 + 1]);
+
+        if (raw == 0x0000 || raw == 0x8000)
+            outC[i] = NAN;
+        else
+            outC[i] = make_temp_c(raw);
     }
     return ESP_OK;
 }
-
-
