@@ -5,7 +5,7 @@
 #include <esp_check.h>
 
 // -----------------------------------------------------------------------------
-// Optional: Software calibration (derzeit neutral)
+// Software calibration (optional)
 // -----------------------------------------------------------------------------
 struct TempCal {
     float scale;
@@ -18,11 +18,13 @@ static TempCal gCal = {
 };
 
 // -----------------------------------------------------------------------------
+// ctor
+// -----------------------------------------------------------------------------
 TMP468::TMP468(uint8_t addr, uint8_t asicCount)
     : m_addr(addr), m_asicCount(asicCount) {}
 
 // -----------------------------------------------------------------------------
-// I2C helpers (TMP468 = 16-bit word-oriented)
+// I2C helpers (WORD oriented – TMP468 requirement)
 // -----------------------------------------------------------------------------
 esp_err_t TMP468::read_bytes(uint8_t reg, uint8_t* out, size_t len)
 {
@@ -47,56 +49,63 @@ esp_err_t TMP468::write_word(uint8_t reg, uint16_t val)
 }
 
 // -----------------------------------------------------------------------------
-// Lock / Reset helpers (TI SBAA588)
+// Lock / Reset helpers (datasheet: SBOS762 + app note SBAA588)
 // -----------------------------------------------------------------------------
 esp_err_t TMP468::unlock()
 {
+    ESP_LOGE(TAG, "TMP468 unlock");
     return write_word(TMP468_REG_LOCK, TMP468_UNLOCK_KEY);
 }
 
 esp_err_t TMP468::soft_reset()
 {
-    // bit15 = soft reset
-    return write_word(TMP468_REG_SOFT_RESET, 0x8000);
+    ESP_LOGE(TAG, "TMP468 soft reset");
+    return write_word(TMP468_REG_SOFT_RESET, 0x8000); // bit15 = reset
 }
 
 esp_err_t TMP468::wait_busy_clear(uint32_t timeout_ms)
 {
-    TickType_t t0 = xTaskGetTickCount();
+    const TickType_t t0 = xTaskGetTickCount();
 
     while (true) {
         uint16_t cfg = 0;
-        if (read_word(TMP468_REG_CONFIG, &cfg) != ESP_OK)
-            return ESP_FAIL;
+        esp_err_t err = read_word(TMP468_REG_CONFIG, &cfg);
+        if (err != ESP_OK) return err;
 
-        // BUSY-Bit ist laut Datasheet optional → wir nutzen Timeout
-        if (pdTICKS_TO_MS(xTaskGetTickCount() - t0) > timeout_ms)
+        // BUSY = bit1 (read-only)
+        if (((cfg >> 1) & 0x1) == 0) {
             return ESP_OK;
+        }
 
+        if (pdTICKS_TO_MS(xTaskGetTickCount() - t0) > timeout_ms) {
+            ESP_LOGE(TAG, "TMP468 busy-check timeout (cfg=0x%04X) -> continue", cfg);
+            return ESP_OK;
+        }
         vTaskDelay(pdMS_TO_TICKS(5));
     }
 }
 
 // -----------------------------------------------------------------------------
-// Init sequence (TI Datasheet compliant)
+// Init sequence (per datasheet)
 // -----------------------------------------------------------------------------
 esp_err_t TMP468::init()
 {
-    ESP_LOGE(TAG, "TMP468 init start @0x%02X (ASICs=%u)", m_addr, m_asicCount);
+    ESP_LOGE(TAG, "TMP468 init start @0x%02X", m_addr);
 
     // --- Manufacturer ID ---
     uint16_t man = 0;
-    ESP_RETURN_ON_ERROR(
-        read_word(TMP468_REG_MAN_ID, &man),
-        TAG, "read MAN_ID"
-    );
-
+    esp_err_t err = read_word(TMP468_REG_MAN_ID, &man);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "MAN_ID read failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGE(TAG, "MAN_ID = 0x%04X", man);
     if (man != TMP468_MANUFACTURER_ID) {
-        ESP_LOGE(TAG, "MAN_ID mismatch: 0x%04X", man);
+        ESP_LOGE(TAG, "MAN_ID mismatch (expected 0x%04X)", TMP468_MANUFACTURER_ID);
         return ESP_ERR_NOT_FOUND;
     }
 
-    // --- Optional Device ID ---
+    // --- Device ID (optional) ---
     uint16_t dev = 0;
     if (read_word(TMP468_REG_DEVICE_ID, &dev) == ESP_OK) {
         ESP_LOGE(TAG, "DEV_ID = 0x%04X", dev);
@@ -108,39 +117,36 @@ esp_err_t TMP468::init()
     vTaskDelay(pdMS_TO_TICKS(5));
     ESP_RETURN_ON_ERROR(unlock(), TAG, "unlock after reset");
 
-    // -----------------------------------------------------------------
-    // Configuration Register (0x30)
-    // Bits 15..8 = REN8..REN1 (Remote Channel Enable)
-    // Bits  7..0 = conversion / averaging / flags (POR = 0x9C)
-    // -----------------------------------------------------------------
-    uint16_t enableMask;
-    if (m_asicCount >= 8) {
-        enableMask = 0xFF;
-    } else {
-        enableMask = (uint16_t)((1u << m_asicCount) - 1u);
-        // 4 ASICs -> 0x0F
-        // 6 ASICs -> 0x3F
-    }
+    // -------------------------------------------------------------------------
+    // --- Configuration ---
+    // TI: CONFIG (0x30) POR = 0x0F9C, Bits15:8 = REN8..REN1, Bit7 LEN
+    // Wir bauen daraus eine Maske passend zu m_asicCount (z.B. 4->REN1..REN4)
+    // Low-Byte 0x9C = LEN=1, SD=0, OS=0, CR=111 (bits4:2), BUSY ignored.
+    // -------------------------------------------------------------------------
+    uint16_t enableMask = 0;
+    if (m_asicCount >= 8) enableMask = 0xFF;
+    else enableMask = (uint16_t)((1u << m_asicCount) - 1u);  // 4->0x0F, 6->0x3F
 
     uint16_t cfg = (uint16_t)(enableMask << 8) | 0x009C;
+    ESP_RETURN_ON_ERROR(write_word(TMP468_REG_CONFIG, cfg), TAG, "write config");
+    ESP_LOGE(TAG, "TMP468 cfg set to 0x%04X (REN mask=0x%02X)", cfg, (unsigned)enableMask);
 
-    ESP_RETURN_ON_ERROR(
-        write_word(TMP468_REG_CONFIG, cfg),
-        TAG, "write CONFIG"
-    );
+    // Warten bis mindestens eine Conversion durch ist
+    (void)wait_busy_clear(500);
 
-    ESP_LOGE(TAG,
-        "TMP468 CONFIG=0x%04X (REN mask=0x%02X)",
-        cfg, enableMask
-    );
-
-    // Optional settle delay
-    (void)wait_busy_clear(250);
+    // --- Optional: Remote Open Status lesen (Pointer 0x23) ---
+    // Wenn CH5/CH6 dauerhaft 0x0000 liefern, ist das hier der schnellste Hinweis.
+    uint16_t open = 0;
+    // Register 0x23 steht im Datasheet als "Remote Channel Open Status Register"
+    // (read-only). Wenn es nicht existiert/anders ist, ignorieren wir den Fehler.
+    if (read_word(0x23, &open) == ESP_OK) {
+        ESP_LOGE(TAG, "TMP468 Remote Open Status (0x23) = 0x%04X", open);
+    }
 
     // --- Clear offsets & n-factors ---
     for (uint8_t ch = 1; ch <= 8; ch++) {
-        write_word(TMP468_OFFSET_REG(ch),  0x0000);
-        write_word(TMP468_NFACTOR_REG(ch), 0x0000);
+        (void)write_word(TMP468_OFFSET_REG(ch),  0x0000);
+        (void)write_word(TMP468_NFACTOR_REG(ch), 0x0000);
     }
 
     ESP_LOGE(TAG, "TMP468 init OK");
@@ -161,16 +167,18 @@ float TMP468::read_local_celsius()
 
 float TMP468::read_remote_celsius(uint8_t channel)
 {
-    if (channel < 1 || channel > 8)
-        return NAN;
+    if (channel < 1 || channel > 8) return NAN;
 
     uint16_t raw = 0;
-    if (read_word(TMP468_REG_TEMP_BASE + channel, &raw) != ESP_OK)
-        return NAN;
+    if (read_word(TMP468_REG_TEMP_BASE + channel, &raw) != ESP_OK) return NAN;
 
-    // TI Datasheet: 0x8000 = invalid / open / short
-    if (raw == 0x8000 || raw == 0x0000)
-        return NAN;
+    // Datasheet: Wenn vor erster Conversion gelesen wird -> 0x0000 (0°C).
+    // Für ASICs ist 0°C praktisch immer "ungültig" => als NAN behandeln,
+    // sonst bekommst du exakt dein Symptom "letzte zwei = 0.00".
+    if (raw == 0x0000) return NAN;
+
+    // Manche TI-Sensoren nutzen 0x8000 als Fehler-Sentinel; schadet nicht zu filtern.
+    if (raw == 0x8000) return NAN;
 
     return make_temp_c(raw);
 }
@@ -194,7 +202,7 @@ float TMP468::get_temperature(int index)
     if (index < 0 || index >= m_asicCount)
         return NAN;
 
-    uint8_t ch = (uint8_t)(index + 1);
+    uint8_t ch = static_cast<uint8_t>(index + 1);
     vTaskDelay(pdMS_TO_TICKS(m_wait_before_read_ms));
 
     float raw = read_remote_celsius(ch);
@@ -227,14 +235,10 @@ esp_err_t TMP468::readAllTempsBlock(float outC[9])
     if (err != ESP_OK) return err;
 
     for (int i = 0; i < 9; i++) {
-        uint16_t raw =
-            (uint16_t(buf[i * 2]) << 8) |
-             uint16_t(buf[i * 2 + 1]);
-
-        if (raw == 0x0000 || raw == 0x8000)
-            outC[i] = NAN;
-        else
-            outC[i] = make_temp_c(raw);
+        uint16_t raw = (uint16_t(buf[i * 2]) << 8) |
+                        uint16_t(buf[i * 2 + 1]);
+        // optional: 0x0000 -> NAN für remote, local lässt du stehen
+        outC[i] = make_temp_c(raw);
     }
     return ESP_OK;
 }
